@@ -5,7 +5,7 @@ import torch.nn as nn
 
 class RoPE(nn.Module):
 
-    def __init__(self, theta: float, d_k: int, max_seq_len: int, device: None):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device= None):
         """
         Args:
             theta: The theta parameter for the RoPE
@@ -19,9 +19,24 @@ class RoPE(nn.Module):
         self.d_k = d_k
         self.max_seq_len = max_seq_len
         self.device = device
+        # 预计算旋转矩阵表
+        self.rotation_matrix_table = self.get_rotation_matrix(theta, d_k, max_seq_len)
      
     def rotation_block(self, theta: float, block_index: int, seq_pos: int, d_k: int) -> torch.Tensor:
-
+        """
+        Args:
+            theta: The theta parameter for the RoPE
+            block_index: The index of the block
+            seq_pos: The position of the sequence i.e. token_positions
+            d_k: The dimension of the key and query
+        Returns:
+            Float[Tensor, "2 2"]: The rotation matrix
+        """
+        # block_index = (0, 1, 2, 3)
+        # 公式为 ： (theta **(2*block_index/d_k))
+        
+        # angle_i^(k) = i / (theta **(2*k-1/d_k))
+        
         angle = torch.tensor(seq_pos/ (theta **(2*block_index/d_k)))
         cos = torch.cos(angle)
         sin = torch.sin(angle)
@@ -33,11 +48,12 @@ class RoPE(nn.Module):
 
         rotation_matrix_table = torch.zeros(max_seq_len, d_k, d_k)
         for i in range(max_seq_len):
+            # k(j) 取 {1，2,.....,d_k/2}
+            # i 取 {1,2,.....,max_seq_len} 这是token_positions
+            # block 就是得到的 d_k//2 个 rotation_block，然后要将它们进行拼接，得到一个 d_k x d_k 的矩阵
             block = [self.rotation_block(theta, j, i, d_k) for j in range(d_k//2)]
             rotation_matrix_table[i,:,:] = torch.block_diag(*block)
         return rotation_matrix_table
-
-
 
     
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
@@ -52,9 +68,10 @@ class RoPE(nn.Module):
         *prefix_dims, seq_len, d_k = x.shape
         if token_positions is None:
             token_positions = torch.arange(seq_len, device=x.device)
-        rotation_matrix = self.rotation_matrix_table[token_positions]   # (batch_size, seq_len, d_k, d_k)
-        x_rotated = rotation_matrix @ x.unsqueeze(-1) # (batch_size, seq_len, d_k, 1)   
-        x_rotated = x_rotated.squeeze(-1) # (batch_size, seq_len, d_k)
+        # 从预计算的旋转矩阵表中索引对应的旋转矩阵
+        rotation_matrix = self.rotation_matrix_table[token_positions]   # (..., seq_len, d_k, d_k)
+        x_rotated = rotation_matrix @ x.unsqueeze(-1) # (..., seq_len, d_k, 1)   
+        x_rotated = x_rotated.squeeze(-1) # (..., seq_len, d_k)
       
         return x_rotated
 

@@ -9,3 +9,7 @@ uv run pytest tests/test_model.py::test_linear -v
 ```python
 uv run pytest tests/test_model.py::test_embedding -v 
 ```
+测试 RoPE
+```
+(base) PS E:\Workspace\cs336-scratch\cs336> uv run pytest tests/test_model.py::test_rope -v 
+```
