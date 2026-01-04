@@ -13,3 +13,14 @@ uv run pytest tests/test_model.py::test_embedding -v
 ```
 (base) PS E:\Workspace\cs336-scratch\cs336> uv run pytest tests/test_model.py::test_rope -v 
 ```
+
+测试多头注意力
+```
+uv run pytest -k tests/test_model.py::test_multihead_self_attention  -v 
+```
+
+测试Transformer 
+
+```
+uv run pytest -k tests/test_model.py::test_transformer_lm -v 
+```

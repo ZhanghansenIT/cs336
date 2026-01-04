@@ -66,12 +66,36 @@ class RoPE(nn.Module):
             Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
         """
         *prefix_dims, seq_len, d_k = x.shape
+        
         if token_positions is None:
-            token_positions = torch.arange(seq_len, device=x.device)
+            token_positions = torch.arange(seq_len, device=x.device, dtype=torch.long)
+        
+        # 处理 token_positions 的形状
+        # token_positions 可能是 (seq_len,) 或 (batch, seq_len) 或其他形状
+        # 我们需要提取 seq_len 维度的位置索引
+        if token_positions.dim() > 1:
+            # 如果是多维的，取第一行（通常所有 batch 的位置相同）
+            # 例如 (batch, seq_len) -> 取 (seq_len,)
+            token_positions = token_positions[0] if token_positions.shape[0] > 0 else token_positions.flatten()[:seq_len]
+        
+        # 确保 token_positions 是 1D 的，长度为 seq_len
+        token_positions = token_positions.flatten()[:seq_len]
+        token_positions = token_positions.to(torch.long)
+        
         # 从预计算的旋转矩阵表中索引对应的旋转矩阵
-        rotation_matrix = self.rotation_matrix_table[token_positions]   # (..., seq_len, d_k, d_k)
-        x_rotated = rotation_matrix @ x.unsqueeze(-1) # (..., seq_len, d_k, 1)   
-        x_rotated = x_rotated.squeeze(-1) # (..., seq_len, d_k)
+        rotation_matrix = self.rotation_matrix_table[token_positions]  # (seq_len, d_k, d_k)
+        
+        # 扩展 rotation_matrix 以匹配 x 的前缀维度
+        # x 的形状是 (*prefix_dims, seq_len, d_k)
+        # rotation_matrix 需要是 (*prefix_dims, seq_len, d_k, d_k)
+        for _ in range(len(prefix_dims)):
+            rotation_matrix = rotation_matrix.unsqueeze(0)  # 在开头添加维度
+        rotation_matrix = rotation_matrix.expand(*prefix_dims, seq_len, d_k, d_k)
+        
+        # 执行矩阵乘法
+        x_unsqueezed = x.unsqueeze(-1)  # (*prefix_dims, seq_len, d_k, 1)
+        x_rotated = rotation_matrix @ x_unsqueezed  # (*prefix_dims, seq_len, d_k, 1)
+        x_rotated = x_rotated.squeeze(-1)  # (*prefix_dims, seq_len, d_k)
       
         return x_rotated
 

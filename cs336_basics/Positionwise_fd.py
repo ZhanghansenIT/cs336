@@ -22,3 +22,6 @@ class Positionwise_fd(nn.Module):
 
         output = self.w2(silu(self.w1(x))*self.w3(x))
         return output 
+
+# 添加别名以兼容不同的导入方式
+PositionwiseFeedForward = Positionwise_fd

@@ -12,11 +12,11 @@ from torch import Tensor
 
 from cs336_basics.BPETokenizer import train_bpe
 from cs336_basics.Linear import Linear
-from cs336_basics.Emdedding import Embedding
+from cs336_basics.Embedding import Embedding
 from cs336_basics.RMSNorm import RMSNorm
 from cs336_basics.Positionwise_fd import Positionwise_fd
 from cs336_basics.RoPE import RoPE
-
+from cs336_basics.Transformer import TransformerLM
 from cs336_basics.Attention import MultiheadSelfAttention
 def run_linear(
     d_in: int,
@@ -413,7 +413,36 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+
+    model = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        theta=rope_theta
+    )
+    
+    model.token_embeddings.weight.data.copy_(weights["token_embeddings.weight"])
+    
+    for layer_idx in range(num_layers):
+        model.layers[layer_idx].casual_multi_head_attention.q_proj.weight.data.copy_(weights[f"layers.{layer_idx}.attn.q_proj.weight"])
+        model.layers[layer_idx].casual_multi_head_attention.k_proj.weight.data.copy_(weights[f"layers.{layer_idx}.attn.k_proj.weight"])
+        model.layers[layer_idx].casual_multi_head_attention.v_proj.weight.data.copy_(weights[f"layers.{layer_idx}.attn.v_proj.weight"])
+        model.layers[layer_idx].casual_multi_head_attention.out_proj.weight.data.copy_(weights[f"layers.{layer_idx}.attn.output_proj.weight"])
+        model.layers[layer_idx].norm_1.weight.data.copy_(weights[f"layers.{layer_idx}.ln1.weight"])
+        model.layers[layer_idx].positionwise_feed_forward.w1.weight.data.copy_(weights[f"layers.{layer_idx}.ffn.w1.weight"])
+        model.layers[layer_idx].positionwise_feed_forward.w2.weight.data.copy_(weights[f"layers.{layer_idx}.ffn.w2.weight"])
+        model.layers[layer_idx].positionwise_feed_forward.w3.weight.data.copy_(weights[f"layers.{layer_idx}.ffn.w3.weight"])
+        model.layers[layer_idx].norm_2.weight.data.copy_(weights[f"layers.{layer_idx}.ln2.weight"])
+
+    model.rms_norm.weight.data.copy_(weights["ln_final.weight"])
+    model.output_embeddings.weight.data.copy_(weights["lm_head.weight"])
+
+    output = model(in_indices)
+    return output
+
 
 
 def run_rmsnorm(
